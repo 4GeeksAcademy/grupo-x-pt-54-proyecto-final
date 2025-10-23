@@ -6,17 +6,35 @@ from flask import Flask, request, jsonify, url_for, send_from_directory
 from flask_migrate import Migrate
 from flask_swagger import swagger
 from api.utils import APIException, generate_sitemap
-from api.models import db
+from api.models import db, User
 from api.routes import api
 from api.admin import setup_admin
 from api.commands import setup_commands
-
+from flask_bcrypt import Bcrypt
+from flask_mail import Mail, Message
+from flask_jwt_extended import JWTManager, create_access_token, decode_token
+from flask_cors import CORS
+from sqlalchemy import select
 # from models import Person
 
 ENV = "development" if os.getenv("FLASK_DEBUG") == "1" else "production"
 static_file_dir = os.path.join(os.path.dirname(
     os.path.realpath(__file__)), '../dist/')
+
 app = Flask(__name__)
+bcrypt = Bcrypt(app)
+jwt = JWTManager(app)
+
+
+app.config["MAIL_SERVER"] = os.getenv("MAIL_SERVER")
+app.config["MAIL_PORT"] = os.getenv("MAIL_PORT")
+app.config["MAIL_USE_TLS"] = os.getenv("MAIL_USE_TLS")
+app.config['MAIL_DEFAULT_SENDER'] = os.getenv("MAIL_USERNAME")
+app.config["MAIL_USERNAME"] = os.getenv("MAIL_USERNAME")
+app.config["MAIL_PASSWORD"] = os.getenv("MAIL_PASSWORD")
+
+mail = Mail(app)
+CORS(app)
 app.url_map.strict_slashes = False
 
 # database condiguration
@@ -68,14 +86,100 @@ def serve_any_other_file(path):
     return response
 
 
-@app.route('/registro', methods=['POST'])
+@app.route('/api/registro', methods=['POST'])
 def handle_registro():
-    data = request.get_json(silent=True)
-    return jsonify({"msg": "Usuario creado correctamente"}), 201
+    try:
+        data = request.get_json(silent=True)
+        email = data.get('email', None)
+        password = data.get('password', None)
+
+        password_hash = bcrypt.generate_password_hash(password).decode('utf-8')
+
+        user = User(email=email, password=password_hash)
+        db.session.add(user)
+        db.session.commit()
+
+        token = create_access_token(identity=email, expires_delta=False)
+        verify_link = f"{os.getenv("VITE_FRONTEND_URL")}/verify?token={token}"
+
+        msg = Message("Verifica tu cuenta", recipients=[email])
+        msg.body = f"Haz click en el enlace para verificar tu cuenta: {verify_link}"
+        mail.send(msg)
+
+        return jsonify({"msg": "Usuario creado correctamente"}), 201
+    except Exception as error:
+        print(error)
+        db.session.rollback()
+        return jsonify({"msg": "Hubo un error en el servidor"}), 500
 
 
-@app.route('/login', methods=['POST'])
-def handle_registro():
+@app.route('/api/verify/<token>', methods=['GET'])
+def verify_token(token):
+    try:
+        data = decode_token(token)
+        user = db.session.execute(db.select(User).filter_by(
+            email=data["sub"])).scalar_one_or_none()
+        if user:
+            user.is_verified = True
+            user.is_active = True
+            db.session.commit()
+            return jsonify({"msg": "Cuenta verificada con éxito"}), 200
+        return jsonify({"msg": "Usuario no encontrado"}), 404
+    except Exception as error:
+        print(error)
+        db.session.rollback()
+        return jsonify({"msg": "Token inválido"}), 400
+
+
+@app.route('/api/forgot', methods=['POST'])
+def forgot_password():
+    try:
+        data = request.get_json(silent=True)
+        email = data.get('email', None)
+        user = db.session.execute(db.select(User).filter_by(
+            email=email)).scalar_one_or_none()
+
+        token = create_access_token(identity=email, expires_delta=False)
+        reset_link = f"{os.getenv("VITE_FRONTEND_URL")}/reset?token={token}"
+
+        msg = Message("Recupera tu contraseña", recipients=[email])
+        msg.body = f"Haz click en el enlace para cambiar tu contraseña: {reset_link}"
+        mail.send(msg)
+
+        return jsonify({"msg": "Correo enviado"}), 200
+
+    except Exception as error:
+        print(error)
+        db.session.rollback()
+        return jsonify({"msg": "Token inválido"}), 400
+
+
+@app.route('/api/reset/<token>', methods=['POST'])
+def handle_reset(token):
+    try:
+        decoded_data = decode_token(token)
+        data = request.get_json(silent=True)
+        new_password = data.get("password", None)
+        print(new_password)
+        email = decoded_data["sub"]
+        print(email)
+        user = db.session.execute(db.select(User).filter_by(
+            email=email)).scalar_one_or_none()
+
+        password_hash = bcrypt.generate_password_hash(
+            new_password).decode('utf-8')
+        user.password = password_hash
+        db.session.commit()
+
+        return jsonify({"msg": "Contraseña actualizada"}), 200
+    except Exception as error:
+        print(error)
+        db.session.rollback()
+        return jsonify({"msg": "Token inválido"}), 400
+
+
+@app.route('/api/login', methods=['POST'])
+def handle_login():
     data = request.get_json(silent=True)
     return jsonify({"msg": "Usuario inició sesión correctamente"}), 200
 

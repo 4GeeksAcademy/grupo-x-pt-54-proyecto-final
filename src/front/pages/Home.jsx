@@ -1,52 +1,25 @@
-import React, { useEffect } from "react"
-import rigoImageUrl from "../assets/img/rigo-baby.jpg";
-import useGlobalReducer from "../hooks/useGlobalReducer.jsx";
+import { useState } from "react";
 
-export const Home = () => {
+export default function Home() {
+	const [email, setEmail] = useState("");
+	const [password, setPassword] = useState("");
 
-	const { store, dispatch } = useGlobalReducer()
-
-	const loadMessage = async () => {
-		try {
-			const backendUrl = import.meta.env.VITE_BACKEND_URL
-
-			if (!backendUrl) throw new Error("VITE_BACKEND_URL is not defined in .env file")
-
-			const response = await fetch(backendUrl + "/api/hello")
-			const data = await response.json()
-
-			if (response.ok) dispatch({ type: "set_hello", payload: data.message })
-
-			return data
-
-		} catch (error) {
-			if (error.message) throw new Error(
-				`Could not fetch the message from the backend.
-				Please check if the backend is running and the backend port is public.`
-			);
-		}
-
-	}
-
-	useEffect(() => {
-		loadMessage()
-	}, [])
+	const handleSubmit = async (e) => {
+		e.preventDefault();
+		await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/registro`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ email, password }),
+		});
+		alert("Revisa tu correo para verificar la cuenta");
+	};
 
 	return (
-		<div className="text-center mt-5">
-			<h1 className="display-4">Hello Rigo!!</h1>
-			<p className="lead">
-				<img src={rigoImageUrl} className="img-fluid rounded-circle mb-3" alt="Rigo Baby" />
-			</p>
-			<div className="alert alert-info">
-				{store.message ? (
-					<span>{store.message}</span>
-				) : (
-					<span className="text-danger">
-						Loading message from the backend (make sure your python 🐍 backend is running)...
-					</span>
-				)}
-			</div>
-		</div>
+		<form onSubmit={handleSubmit}>
+			<h2>Registro</h2>
+			<input placeholder="Email" onChange={(e) => setEmail(e.target.value)} />
+			<input placeholder="Contraseña" type="password" onChange={(e) => setPassword(e.target.value)} />
+			<button type="submit">Registrar</button>
+		</form>
 	);
-}; 
+}
