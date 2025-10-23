@@ -100,7 +100,7 @@ def handle_registro():
         db.session.commit()
 
         token = create_access_token(identity=email, expires_delta=False)
-        verify_link = f"{os.getenv("VITE_FRONTEND_URL")}/verify?token={token}"
+        verify_link = f"{os.getenv('VITE_FRONTEND_URL')}/verify?token={token}"
 
         msg = Message("Verifica tu cuenta", recipients=[email])
         msg.body = f"Haz click en el enlace para verificar tu cuenta: {verify_link}"
