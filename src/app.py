@@ -140,7 +140,7 @@ def forgot_password():
             email=email)).scalar_one_or_none()
 
         token = create_access_token(identity=email, expires_delta=False)
-        reset_link = f"{os.getenv("VITE_FRONTEND_URL")}/reset?token={token}"
+        reset_link = f"{os.getenv('VITE_FRONTEND_URL')}/reset?token={token}"
 
         msg = Message("Recupera tu contraseña", recipients=[email])
         msg.body = f"Haz click en el enlace para cambiar tu contraseña: {reset_link}"
